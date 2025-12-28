@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+    <OutputPath>dist/</OutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="MediaBrowser.Common">
+      <HintPath>lib/MediaBrowser.Common.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="MediaBrowser.Controller">
+      <HintPath>lib/MediaBrowser.Controller.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="MediaBrowser.Model">
+      <HintPath>lib/MediaBrowser.Model.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+</Project>
