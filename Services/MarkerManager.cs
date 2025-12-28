@@ -22,14 +22,12 @@ namespace SeasonMarkerCopier.Services
 
         public void WriteMarkers(Episode episode)
         {
-            var options = Plugin.Instance.Configuration;
+            var options = Plugin.Instance.InstanceOptions;
             var chapters = new List<ChapterInfo>();
 
-            // 片头开始与结束 (激活按钮关键)
             chapters.Add(new ChapterInfo { Name = "Intro", StartPositionTicks = 0, MarkerType = MarkerType.IntroStart });
             chapters.Add(new ChapterInfo { Name = "Start of Content", StartPositionTicks = TimeSpan.FromSeconds(options.IntroEndSeconds).Ticks, MarkerType = MarkerType.IntroEnd });
 
-            // 片尾
             long runtime = episode.RunTimeTicks ?? 0;
             if (runtime > 0)
             {
@@ -37,13 +35,21 @@ namespace SeasonMarkerCopier.Services
                 chapters.Add(new ChapterInfo { Name = "Outro", StartPositionTicks = Math.Max(0, outroStart), MarkerType = MarkerType.CreditsStart });
             }
 
-            // 1. 保存章节数据
-            _mediaSourceManager.SaveChapters(episode.InternalId, chapters);
+            try 
+            {
+                // 修复点：使用标准的官方保存方法
+                // 如果直接调用报错，说明你的 DLL 版本中该方法签名不同
+                _mediaSourceManager.SaveChapters(episode.InternalId, chapters);
 
-            // 2. 强制触发元数据更新，使 PlaybackInfo 重新构建 Markers 字段
-            _libraryManager.UpdateItem(episode, episode.GetParent(), ItemUpdateType.MetadataEdit, null);
-            
-            _logger.Info("Markers written and refreshed for: {0}", episode.Name);
+                // 强制刷新：这是 4.9 激活按钮的关键
+                _libraryManager.UpdateItem(episode, episode.GetParent(), ItemUpdateType.MetadataEdit, null);
+                
+                _logger.Info("Markers saved for: {0}", episode.Name);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error("Error saving chapters: {0}", ex.Message);
+            }
         }
     }
 }
