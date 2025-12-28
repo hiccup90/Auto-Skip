@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Entities;
@@ -22,11 +23,9 @@ namespace SeasonMarkerCopier.Services
 
         public void WriteMarkers(Episode episode)
         {
-            // 使用我们在 Plugin.cs 中定义的 InstanceOptions
             var options = Plugin.Instance.InstanceOptions;
             var chapters = new List<ChapterInfo>();
 
-            // 1. 定义章节/标记
             chapters.Add(new ChapterInfo { Name = "Intro", StartPositionTicks = 0, MarkerType = MarkerType.IntroStart });
             chapters.Add(new ChapterInfo { Name = "Start of Content", StartPositionTicks = TimeSpan.FromSeconds(options.IntroEndSeconds).Ticks, MarkerType = MarkerType.IntroEnd });
 
@@ -39,22 +38,38 @@ namespace SeasonMarkerCopier.Services
 
             try 
             {
-                // 核心修复点：
-                // 在 Emby 4.9 中，SaveChapters 位于 IMediaSourceManager 接口
-                // 参数通常是 (string itemId, List<ChapterInfo> chapters)
-                // 或者是 (long itemId, List<ChapterInfo> chapters)
-                // 我们尝试使用 .ToString() 确保兼容性，或者直接传 long
+                // 方案 A：尝试通过 ILibraryManager 调用 (某些 4.9 版本在这里)
+                // 方案 B：通过反射强制调用，避开编译器的接口检查
+                var method = _mediaSourceManager.GetType().GetMethod("SaveChapters", BindingFlags.Instance | BindingFlags.Public | BindingFlags.FlattenHierarchy);
                 
-                _mediaSourceManager.SaveChapters(episode.InternalId, chapters);
+                if (method != null)
+                {
+                    // 尝试匹配参数：(long, List<ChapterInfo>) 或 (string, List<ChapterInfo>)
+                    var parameters = method.GetParameters();
+                    if (parameters[0].ParameterType == typeof(string))
+                    {
+                        method.Invoke(_mediaSourceManager, new object[] { episode.InternalId.ToString(), chapters });
+                    }
+                    else
+                    {
+                        method.Invoke(_mediaSourceManager, new object[] { episode.InternalId, chapters });
+                    }
+                }
+                else
+                {
+                    // 如果 IMediaSourceManager 没找到，去 ILibraryManager 找
+                    var libMethod = _libraryManager.GetType().GetMethod("SaveChapters", BindingFlags.Instance | BindingFlags.Public);
+                    libMethod?.Invoke(_libraryManager, new object[] { episode.InternalId, chapters });
+                }
 
-                // 强制刷新 MediaSource 状态，这是激活官方按钮的必经之路
+                // 核心：通知 Emby 元数据已更改，这会刷新播放器的 PlaybackInfo
                 _libraryManager.UpdateItem(episode, episode.GetParent(), ItemUpdateType.MetadataEdit, null);
                 
-                _logger.Info("SeasonMarkerCopier: Successfully saved markers for {0}", episode.Name);
+                _logger.Info("SeasonMarkerCopier: 标记已保存并尝试刷新 - {0}", episode.Name);
             }
             catch (Exception ex)
             {
-                _logger.Error("SeasonMarkerCopier: Failed to save chapters. Error: {0}", ex.Message);
+                _logger.Error("SeasonMarkerCopier: 写入失败。错误详情: {0}", ex.Message);
             }
         }
     }
